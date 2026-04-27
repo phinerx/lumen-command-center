@@ -6,47 +6,42 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * DashboardRegistry manages the lifecycle and registration of premium UI components.
+ * DashboardRegistry manages the lifecycle and registration of SaaS dashboard components.
  */
-final class DashboardRegistry
+class DashboardRegistry
 {
-    private static ?DashboardRegistry $instance = null;
     private array $components = [];
-    private array $registrySchema = ['id', 'version', 'component_class'];
+    private bool $isLocked = false;
 
-    private function __construct() {}
-
-    public static function getInstance(): self
+    public function register(string $id, array $config): void
     {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-
-    public function register(string $id, array $definition): void
-    {
-        foreach ($this->registrySchema as $key) {
-            if (!isset($definition[$key])) {
-                throw new InvalidArgumentException("Component definition missing required key: {$key}");
-            }
+        if ($this->isLocked) {
+            throw new RuntimeException("Registry is locked. Cannot register component: {$id}");
         }
 
-        if (isset($this->components[$id])) {
-            throw new RuntimeException("Component with ID '{$id}' is already registered.");
+        if (!isset($config['component'], $config['props'])) {
+            throw new InvalidArgumentException("Component configuration must contain 'component' and 'props' keys.");
         }
 
-        $this->components[$id] = array_merge($definition, ['registered_at' => microtime(true)]);
+        $this->components[$id] = array_merge(['registered_at' => microtime(true)], $config);
     }
 
     public function resolve(string $id): array
     {
         if (!isset($this->components[$id])) {
-            throw new RuntimeException("Component '{$id}' not found in registry.");
+            throw new InvalidArgumentException("Component with ID '{$id}' not found in registry.");
         }
+
         return $this->components[$id];
     }
 
-    public function __clone() {}
-    public function __wakeup() { throw new RuntimeException("Cannot unserialize singleton."); }
+    public function lock(): void
+    {
+        $this->isLocked = true;
+    }
+
+    public function getManifest(): array
+    {
+        return $this->components;
+    }
 }
